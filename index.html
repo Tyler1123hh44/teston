@@ -32,6 +32,36 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+    <script>
+        // Compatibility alias:
+        // The supabase v2 CDN exports a lowercase `supabase` global in some bundles.
+        // Your code uses `Supabase.createClient(...)` (capital S). Create a small,
+        // synchronous alias so existing initialization calls succeed without changing
+        // any of your original JS code.
+        (function () {
+            try {
+                if (window.supabase && !window.Supabase) {
+                    // Bind the createClient so `window.Supabase.createClient(...)` works.
+                    window.Supabase = {
+                        createClient: function (url, key, opts) {
+                            return window.supabase.createClient(url, key, opts);
+                        }
+                    };
+                } else if (window.Supabase && !window.supabase) {
+                    // Also make a lowercase alias if needed.
+                    window.supabase = {
+                        createClient: function (url, key, opts) {
+                            return window.Supabase.createClient(url, key, opts);
+                        }
+                    };
+                }
+            } catch (e) {
+                // Keep quiet — we'll let your existing error handling surface any issues.
+                console && console.warn && console.warn('Supabase alias setup warning:', e);
+            }
+        })();
+    </script>
+
 </head>
 <body>
     <!-- We will render page1 first (index) then switch to page2 (welcome).
@@ -2364,60 +2394,6 @@
                     <td><span class="retry-box">Retry</span></td>
                     <td><span class="retry-box">Retry</span></td>
                 </tr>
-                <tr>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td><span class="retry-box">Retry</span></td>
-                    <td><span class="retry-box">Retry</span></td>
-                </tr>
-                <tr>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td><span class="retry-box">Retry</span></td>
-                    <td><span class="retry-box">Retry</span></td>
-                </tr>
-                <tr>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td><span class="retry-box">Retry</span></td>
-                    <td><span class="retry-box">Retry</span></td>
-                </tr>
-                <tr>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td><span class="retry-box">Retry</span></td>
-                    <td><span class="retry-box">Retry</span></td>
-                </tr>
-                <tr>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td><span class="retry-box">Retry</span></td>
-                    <td><span class="retry-box">Retry</span></td>
-                </tr>
-                <tr>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td><span class="retry-box">Retry</span></td>
-                    <td><span class="retry-box">Retry</span></td>
-                </tr>
             </tbody>
         </table>
     </div>
@@ -2817,67 +2793,6 @@
             Magic
         </div>
     </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const codeInputs = document.querySelectorAll('.code-box');
-            
-            codeInputs.forEach((input, index) => {
-                // Handle input event for auto-focus to next box
-                input.addEventListener('input', function(e) {
-                    // Only allow numeric input
-                    if (!/^\d*$/.test(this.value)) {
-                        this.value = this.value.replace(/\D/g, '');
-                    }
-                    
-                    // If a number is entered and it's not the last box, move to next
-                    if (this.value.length === 1 && index < codeInputs.length - 1) {
-                        codeInputs[index + 1].focus();
-                    }
-                });
-
-                // Handle backspace to go to previous box
-                input.addEventListener('keydown', function(e) {
-                    if (e.key === 'Backspace' && this.value === '' && index > 0) {
-                        codeInputs[index - 1].focus();
-                    }
-                });
-
-                // Handle paste functionality
-                input.addEventListener('paste', function(e) {
-                    e.preventDefault();
-                    const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-                    const digits = pastedText.replace(/\D/g, '').split('');
-                    
-                    digits.forEach((digit, i) => {
-                        if (index + i < codeInputs.length) {
-                            codeInputs[index + i].value = digit;
-                        }
-                    });
-                    
-                    // Focus on the next empty box or the last box
-                    const nextEmptyIndex = Math.min(index + digits.length, codeInputs.length - 1);
-                    codeInputs[nextEmptyIndex].focus();
-                });
-
-                // Prevent non-numeric input
-                input.addEventListener('keypress', function(e) {
-                    if (!/\d/.test(e.key)) {
-                        e.preventDefault();
-                    }
-                });
-            });
-
-            // Close button functionality
-            document.querySelector('.close-btn').addEventListener('click', function() {
-                console.log('Close clicked');
-                // Add your close functionality here
-            });
-
-            // Auto-focus on first input when page loads
-            codeInputs[0].focus();
-        });
-    </script>
 </body>
 </html>
     </script>
